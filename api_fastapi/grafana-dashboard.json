@@ -1,0 +1,165 @@
+{
+  "dashboard": {
+    "title": "IoT ESP32 Dashboard",
+    "tags": ["iot", "mqtt", "esp32"],
+    "timezone": "browser",
+    "schemaVersion": 36,
+    "refresh": "5s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Temperatura (°C)",
+        "type": "stat",
+        "targets": [
+          {
+            "target": "temperatura",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "celsius",
+            "min": 0,
+            "max": 50,
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 28 },
+                { "color": "red", "value": 30 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Humedad (%)",
+        "type": "stat",
+        "targets": [
+          {
+            "target": "humedad",
+            "refId": "B"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Nivel de Luz (%)",
+        "type": "stat",
+        "targets": [
+          {
+            "target": "luz",
+            "refId": "C"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 20 },
+                { "color": "green", "value": 30 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Estado del Sistema",
+        "type": "stat",
+        "targets": [
+          {
+            "target": "estado",
+            "refId": "D"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "options": { "NORMAL": { "color": "green", "text": "✅ Normal" } }, "type": "value" },
+              { "options": { "ALERTA_TEMP": { "color": "red", "text": "🌡️ Temp Alta" } }, "type": "value" },
+              { "options": { "ALERTA_LUZ": { "color": "yellow", "text": "🌑 Luz Baja" } }, "type": "value" },
+              { "options": { "ALERTA_DOBLE": { "color": "red", "text": "🚨 Doble Alerta" } }, "type": "value" }
+            ]
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Historial de Temperatura",
+        "type": "timeseries",
+        "targets": [
+          {
+            "target": "temperatura",
+            "refId": "E"
+          }
+        ],
+        "gridPos": { "h": 10, "w": 12, "x": 0, "y": 8 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "celsius",
+            "min": 0,
+            "max": 50
+          }
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "single" }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Historial de Humedad",
+        "type": "timeseries",
+        "targets": [
+          {
+            "target": "humedad",
+            "refId": "F"
+          }
+        ],
+        "gridPos": { "h": 10, "w": 12, "x": 12, "y": 8 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Historial de Luz",
+        "type": "timeseries",
+        "targets": [
+          {
+            "target": "luz",
+            "refId": "G"
+          }
+        ],
+        "gridPos": { "h": 10, "w": 24, "x": 0, "y": 18 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      }
+    ]
+  }
+}
