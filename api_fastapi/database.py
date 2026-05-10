@@ -51,20 +51,43 @@ class Database:
             print("💾 Base de datos inicializada")
     
     async def insert_metric(self, data: Dict[str, Any]) -> int:
-        """Insertar una nueva métrica"""
+        """Insertar una nueva métrica.
+        
+        Si el ESP32 envía 'timestamp' en el payload, se usa ese valor.
+        Si no, la base de datos usa CURRENT_TIMESTAMP (comportamiento por defecto del manual).
+        """
         async with aiosqlite.connect(self.db_path) as db:
-            # La base de datos usa CURRENT_TIMESTAMP automáticamente
-            cursor = await db.execute("""
-                INSERT INTO metrics (device_id, topic, temperatura, humedad, luz, estado)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                data.get('device_id', 'unknown'),
-                data.get('topic', 'unknown'),
-                data.get('temperatura'),
-                data.get('humedad'),
-                data.get('luz'),
-                data.get('estado')
-            ))
+            # Verificar si el ESP32 envió su propio timestamp
+            esp_timestamp = data.get('timestamp')
+            
+            if esp_timestamp:
+                # El ESP32 envió timestamp - usar el valor proporcionado
+                cursor = await db.execute("""
+                    INSERT INTO metrics (device_id, topic, temperatura, humedad, luz, estado, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    data.get('device_id', 'unknown'),
+                    data.get('topic', 'unknown'),
+                    data.get('temperatura'),
+                    data.get('humedad'),
+                    data.get('luz'),
+                    data.get('estado'),
+                    esp_timestamp
+                ))
+            else:
+                # Comportamiento según manual: usar CURRENT_TIMESTAMP del servidor
+                cursor = await db.execute("""
+                    INSERT INTO metrics (device_id, topic, temperatura, humedad, luz, estado)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    data.get('device_id', 'unknown'),
+                    data.get('topic', 'unknown'),
+                    data.get('temperatura'),
+                    data.get('humedad'),
+                    data.get('luz'),
+                    data.get('estado')
+                ))
+            
             await db.commit()
             return cursor.lastrowid
     
@@ -99,20 +122,28 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             
-            since = datetime.now() - timedelta(hours=hours)
+            # Usar UTC para ser consistente con CURRENT_TIMESTAMP de SQLite
+            # Formato: 'YYYY-MM-DD HH:MM:SS' (igual que SQLite CURRENT_TIMESTAMP)
+            since = (datetime.utcnow() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
             
             if device_id:
                 cursor = await db.execute("""
-                    SELECT * FROM metrics 
+                    SELECT 
+                        id, device_id, topic, temperatura, humedad, luz, estado,
+                        strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                    FROM metrics 
                     WHERE timestamp >= ? AND device_id = ?
                     ORDER BY timestamp ASC
-                """, (since.isoformat(), device_id))
+                """, (since, device_id))
             else:
                 cursor = await db.execute("""
-                    SELECT * FROM metrics 
+                    SELECT 
+                        id, device_id, topic, temperatura, humedad, luz, estado,
+                        strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                    FROM metrics 
                     WHERE timestamp >= ?
                     ORDER BY timestamp ASC
-                """, (since.isoformat(),))
+                """, (since,))
             
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -166,7 +197,8 @@ class Database:
             db.row_factory = aiosqlite.Row
             
             cursor = await db.execute(f"""
-                SELECT {metric} as value, timestamp
+                SELECT {metric} as value, 
+                       strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
                 FROM metrics
                 WHERE {metric} IS NOT NULL
                     AND timestamp >= ?
@@ -200,7 +232,8 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             
-            since = (datetime.now() - timedelta(hours=24)).isoformat()
+            # Usar UTC para ser consistente con CURRENT_TIMESTAMP de SQLite
+            since = (datetime.utcnow() - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
             
             cursor = await db.execute("""
                 SELECT 

@@ -331,7 +331,7 @@ async def grafana_annotations():
     return []
 
 
-@app.get("/api/grafana/timeseries", tags=["Grafana"])
+@app.api_route("/api/grafana/timeseries", methods=["GET", "POST"], tags=["Grafana"])
 async def grafana_timeseries(
     metric: str = Query("temperatura", description="Métrica a obtener: temperatura, humedad, luz"),
     limit: int = Query(1000, ge=1, le=5000, description="Cantidad máxima de registros")
@@ -354,9 +354,10 @@ async def grafana_timeseries(
         for m in metrics:
             val = m.get(metric)
             if val is not None:
-                # Formato compatible con Infinity Table -> Time Series
+                # Formato compatible con Infinity Time Series
+                # Grafana Infinity busca campo "time" para el eje X
                 result.append({
-                    "timestamp": m.get('timestamp'),
+                    "time": m.get('timestamp'),
                     "metric": metric,
                     "value": float(val)
                 })
@@ -368,13 +369,14 @@ async def grafana_timeseries(
         return []
 
 
-@app.get("/api/grafana/data", tags=["Grafana"])
+@app.api_route("/api/grafana/data", methods=["GET", "POST"], tags=["Grafana"])
 async def grafana_data(
     metric: str = Query("temperatura", description="Métrica: temperatura, humedad, luz"),
     hours: int = Query(24, ge=1, le=168, description="Horas de historial")
 ):
     """
     Endpoint simple para Grafana Infinity - compatible con formato JSON/Table.
+    Devuelve timestamps en formato ISO 8601 UTC (2026-05-03T03:44:04Z).
     """
     valid_metrics = ["temperatura", "humedad", "luz"]
     
@@ -382,7 +384,7 @@ async def grafana_data(
         return []
     
     try:
-        # Obtener datos de las últimas N horas
+        # Obtener datos de las últimas N horas (timestamps ya vienen en ISO 8601 UTC)
         metrics = await db.get_metrics_history(hours)
         
         # Formatear para Infinity - devolver array directo
@@ -391,7 +393,7 @@ async def grafana_data(
             val = m.get(metric)
             if val is not None:
                 result.append({
-                    "time": m.get('timestamp'),
+                    "time": m.get('timestamp'),  # Ya viene como ISO 8601 con 'Z'
                     "value": float(val),
                     "metric": metric
                 })

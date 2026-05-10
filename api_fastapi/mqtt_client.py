@@ -84,15 +84,17 @@ class MQTTClient:
             data = json.loads(payload)
             
             # Preparar datos para la base de datos
-            # Nota: No enviamos timestamp, la DB usará CURRENT_TIMESTAMP (hora del servidor)
+            # Según manual: El ESP32 NO envía la hora por defecto.
+            # La API usa CURRENT_TIMESTAMP del servidor si no viene timestamp en el payload.
+            # Si el ESP32 envía 'timestamp', se usa ese valor (para casos avanzados).
             metric_data = {
                 'device_id': data.get('dispositivo', 'unknown'),
                 'topic': 'sensores/datos',
                 'temperatura': data.get('temperatura'),
                 'humedad': data.get('humedad'),
                 'luz': data.get('luz'),
-                'estado': data.get('estado')
-                # timestamp: la base de datos lo agrega automáticamente
+                'estado': data.get('estado'),
+                'timestamp': data.get('timestamp')  # Opcional: si el ESP32 lo envía
             }
             
             # Guardar en base de datos usando el event loop principal
