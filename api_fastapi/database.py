@@ -238,24 +238,46 @@ class Database:
         date_from: str,
         date_to: str
     ) -> List[Dict]:
-        """Obtener serie temporal de una métrica específica (para Grafana)"""
-        valid_metrics = ['temperatura', 'humedad', 'luz']
+        """Obtener serie temporal de una métrica específica (para Grafana Simple JSON).
+
+        estado se codifica numéricamente: NORMAL=0, ALERTA_TEMP=1, ALERTA_LUZ=2, ALERTA_DOBLE=3.
+        """
+        valid_metrics = ['temperatura', 'humedad', 'luz', 'estado']
         
         if metric not in valid_metrics:
             raise ValueError(f"Métrica no válida. Opciones: {valid_metrics}")
         
+        estado_case = """CASE TRIM(estado)
+            WHEN 'NORMAL' THEN 0
+            WHEN 'ALERTA_TEMP' THEN 1
+            WHEN 'ALERTA_LUZ' THEN 2
+            WHEN 'ALERTA_DOBLE' THEN 3
+            ELSE NULL END"""
+        
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             
-            cursor = await db.execute(f"""
-                SELECT {metric} as value, 
-                       {_ts_iso_select()}
-                FROM metrics
-                WHERE {metric} IS NOT NULL
-                    AND datetime({_TS_CANONICAL}) >= datetime(?)
-                    AND datetime({_TS_CANONICAL}) <= datetime(?)
-                ORDER BY datetime({_TS_CANONICAL}) ASC
-            """, (date_from, date_to))
+            if metric == 'estado':
+                cursor = await db.execute(f"""
+                    SELECT ({estado_case}) AS value,
+                           {_ts_iso_select()}
+                    FROM metrics
+                    WHERE estado IS NOT NULL AND TRIM(estado) != ''
+                        AND ({estado_case}) IS NOT NULL
+                        AND datetime({_TS_CANONICAL}) >= datetime(?)
+                        AND datetime({_TS_CANONICAL}) <= datetime(?)
+                    ORDER BY datetime({_TS_CANONICAL}) ASC
+                """, (date_from, date_to))
+            else:
+                cursor = await db.execute(f"""
+                    SELECT {metric} as value, 
+                           {_ts_iso_select()}
+                    FROM metrics
+                    WHERE {metric} IS NOT NULL
+                        AND datetime({_TS_CANONICAL}) >= datetime(?)
+                        AND datetime({_TS_CANONICAL}) <= datetime(?)
+                    ORDER BY datetime({_TS_CANONICAL}) ASC
+                """, (date_from, date_to))
             
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]

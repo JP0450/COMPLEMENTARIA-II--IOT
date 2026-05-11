@@ -32,6 +32,15 @@ def _timestamp_to_epoch_ms(ts: Optional[str]) -> Optional[int]:
         return None
 
 
+# Codificación de estado para paneles Grafana (valor numérico + etiqueta en JSON separado)
+_ESTADO_A_CODE = {
+    "NORMAL": 0,
+    "ALERTA_TEMP": 1,
+    "ALERTA_LUZ": 2,
+    "ALERTA_DOBLE": 3,
+}
+
+
 # ==================== MODELOS PYDANTIC ====================
 
 class MetricData(BaseModel):
@@ -350,14 +359,18 @@ async def grafana_annotations():
 
 @app.api_route("/api/grafana/timeseries", methods=["GET", "POST"], tags=["Grafana"])
 async def grafana_timeseries(
-    metric: str = Query("temperatura", description="Métrica a obtener: temperatura, humedad, luz"),
-    limit: int = Query(1000, ge=1, le=5000, description="Cantidad máxima de registros")
+    metric: str = Query(
+        "temperatura",
+        description="Métrica: temperatura, humedad, luz, estado (alertas como texto + código)",
+    ),
+    limit: int = Query(1000, ge=1, le=5000, description="Cantidad máxima de registros"),
 ):
     """
     Endpoint para Grafana Infinity - TODOS los datos con formato correcto.
     Devuelve datos en formato compatible con Time Series de Grafana.
+    Para metric=estado incluye campo texto \"estado\" (State timeline) y \"value\" 0-3 (series numéricas).
     """
-    valid_metrics = ["temperatura", "humedad", "luz"]
+    valid_metrics = ["temperatura", "humedad", "luz", "estado"]
     
     if metric not in valid_metrics:
         return []
@@ -369,11 +382,27 @@ async def grafana_timeseries(
         # Formatear para Grafana Infinity: array de objetos con campos específicos
         result = []
         for m in metrics:
-            val = m.get(metric)
-            if val is None:
-                continue
             ts_ms = _timestamp_to_epoch_ms(m.get("timestamp"))
             if ts_ms is None:
+                continue
+            if metric == "estado":
+                est = m.get("estado")
+                if est is None or str(est).strip() == "":
+                    continue
+                est_key = str(est).strip()
+                code = _ESTADO_A_CODE.get(est_key)
+                if code is None:
+                    continue
+                result.append({
+                    "time": ts_ms,
+                    "Time": ts_ms,
+                    "metric": metric,
+                    "estado": est_key,
+                    "value": float(code),
+                })
+                continue
+            val = m.get(metric)
+            if val is None:
                 continue
             # Campos "time" y "Time": Infinity / Grafana a veces solo detectan uno u otro
             # Tipo de columna en el panel: Timestamp (UNIX ms). Evitar JSONata vacío: usar parser Simple.
@@ -393,14 +422,16 @@ async def grafana_timeseries(
 
 @app.api_route("/api/grafana/data", methods=["GET", "POST"], tags=["Grafana"])
 async def grafana_data(
-    metric: str = Query("temperatura", description="Métrica: temperatura, humedad, luz"),
-    hours: int = Query(24, ge=1, le=168, description="Horas de historial")
+    metric: str = Query(
+        "temperatura",
+        description="Métrica: temperatura, humedad, luz, estado",
+    ),
+    hours: int = Query(24, ge=1, le=168, description="Horas de historial"),
 ):
     """
     Endpoint simple para Grafana Infinity - compatible con formato JSON/Table.
-    Devuelve timestamps en formato ISO 8601 UTC (2026-05-03T03:44:04Z).
     """
-    valid_metrics = ["temperatura", "humedad", "luz"]
+    valid_metrics = ["temperatura", "humedad", "luz", "estado"]
     
     if metric not in valid_metrics:
         return []
@@ -412,11 +443,27 @@ async def grafana_data(
         # Formatear para Infinity - devolver array directo
         result = []
         for m in metrics:
-            val = m.get(metric)
-            if val is None:
-                continue
             ts_ms = _timestamp_to_epoch_ms(m.get("timestamp"))
             if ts_ms is None:
+                continue
+            if metric == "estado":
+                est = m.get("estado")
+                if est is None or str(est).strip() == "":
+                    continue
+                est_key = str(est).strip()
+                code = _ESTADO_A_CODE.get(est_key)
+                if code is None:
+                    continue
+                result.append({
+                    "time": ts_ms,
+                    "Time": ts_ms,
+                    "metric": metric,
+                    "estado": est_key,
+                    "value": float(code),
+                })
+                continue
+            val = m.get(metric)
+            if val is None:
                 continue
             result.append({
                 "time": ts_ms,
