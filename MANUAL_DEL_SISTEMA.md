@@ -12,6 +12,381 @@ El sistema monitorea **temperatura**, **humedad** y **luz** en tiempo real, dete
 
 ---
 
+## 📋 MANUAL DE USUARIO - Cómo ejecutar en tu máquina
+
+Esta guía te ayudará a configurar y ejecutar el sistema IoT completo en tu computadora desde cero.
+
+### 🔧 Prerrequisitos
+
+#### Hardware necesario:
+- **ESP32** (cualquier modelo con WiFi)
+- **Sensores**:
+  - DHT22 (temperatura y humedad)
+  - Fotoresistor/LDR (luz)
+  - LED (indicador)
+  - Botón pulsador
+- **Computadora** con Windows/Linux/Mac
+
+#### Software necesario:
+- **Arduino IDE** (para programar el ESP32)
+- **Python 3.8+** (para la API)
+- **Mosquitto MQTT Broker**
+- **Git** (opcional, para clonar repositorio)
+
+---
+
+### 🚀 PASO 1: Preparar el entorno de desarrollo
+
+#### 1.1 Instalar Python
+1. Ve a https://python.org
+2. Descarga Python 3.8 o superior
+3. Durante instalación, marca "Add Python to PATH"
+4. Verifica instalación:
+```bash
+python --version
+pip --version
+```
+
+#### 1.2 Instalar Arduino IDE
+1. Ve a https://arduino.cc
+2. Descarga e instala Arduino IDE
+3. Instala el soporte para ESP32:
+   - Abre Arduino IDE
+   - Ve a **Archivo > Preferencias**
+   - En "Gestor de URLs adicionales de tarjetas", agrega:
+     ```
+     https://dl.espressif.com/dl/package_esp32_index.json
+     ```
+   - Ve a **Herramientas > Placa > Gestor de tarjetas**
+   - Busca "esp32" e instala "ESP32 by Espressif Systems"
+
+#### 1.3 Instalar Mosquitto MQTT Broker
+
+**Windows:**
+1. Ve a https://mosquitto.org/download/
+2. Descarga el instalador de Windows
+3. Instala Mosquitto
+4. Copia el archivo `mosquitto_local.conf` a `C:\Program Files\mosquitto\`
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install mosquitto mosquitto-clients
+```
+
+---
+
+### 📁 PASO 2: Obtener los archivos del proyecto
+
+#### Opción A: Descargar archivos
+1. Crea una carpeta en tu escritorio: `IoT_Proyecto`
+2. Descarga todos los archivos de este proyecto y colócalos en la carpeta
+
+#### Opción B: Usar Git (recomendado)
+```bash
+cd Desktop
+git clone [URL_DEL_REPOSITORIO] IoT_Proyecto
+cd IoT_Proyecto
+```
+
+La estructura final debe ser:
+```
+IoT_Proyecto/
+├── MANUAL_DEL_SISTEMA.md
+├── segundaversion_local.ino
+└── api_fastapi/
+    ├── main.py
+    ├── database.py
+    ├── mqtt_client.py
+    ├── requirements.txt
+    ├── simulador.py
+    ├── mosquitto_local.conf
+    ├── mosquitto.conf
+    ├── grafana-dashboard.json
+    └── README.md
+```
+
+---
+
+### 🌐 PASO 3: Configurar la API FastAPI
+
+1. **Abrir terminal/cmd en la carpeta del proyecto:**
+```bash
+cd Desktop/IoT_Proyecto/api_fastapi
+```
+
+2. **Crear entorno virtual:**
+```bash
+# Windows
+python -m venv venv
+venv\Scripts\activate
+
+# Linux/Mac
+python -m venv venv
+source venv/bin/activate
+```
+
+3. **Instalar dependencias:**
+```bash
+pip install -r requirements.txt
+```
+
+4. **Verificar instalación:**
+```bash
+python -c "import fastapi, uvicorn, paho.mqtt, aiosqlite; print('✅ Todas las dependencias instaladas')"
+```
+
+---
+
+### 📡 PASO 4: Iniciar el Broker MQTT
+
+**Windows:**
+1. Abrir CMD como administrador
+2. Ir a la carpeta de Mosquitto:
+```bash
+cd "C:\Program Files\mosquitto"
+```
+3. Iniciar Mosquitto con configuración local:
+```bash
+mosquitto -c "C:\Users\[TU_USUARIO]\Desktop\IoT_Proyecto\api_fastapi\mosquitto_local.conf" -v
+```
+
+**Linux:**
+```bash
+cd Desktop/IoT_Proyecto/api_fastapi
+mosquitto -c mosquitto_local.conf -v
+```
+
+Deberías ver algo como:
+```
+1666612800: mosquitto version 2.0.15 starting
+1666612800: Config loaded from mosquitto_local.conf
+1666612800: Opening ipv4 listen socket on port 1883.
+1666612800: Opening ipv6 listen socket on port 1883.
+```
+
+**Importante:** Mantén esta terminal abierta. El broker debe estar corriendo siempre.
+
+---
+
+### 🚀 PASO 5: Iniciar la API FastAPI
+
+1. **Abrir nueva terminal** en la carpeta del proyecto:
+```bash
+cd Desktop/IoT_Proyecto/api_fastapi
+```
+
+2. **Activar entorno virtual:**
+```bash
+# Windows
+venv\Scripts\activate
+
+# Linux/Mac
+source venv/bin/activate
+```
+
+3. **Iniciar el servidor:**
+```bash
+python main.py
+```
+
+Deberías ver:
+```
+🚀 Iniciando servidor IoT...
+💾 Base de datos inicializada
+🔌 Conectando a MQTT (localhost:1883)...
+✅ Conectado al broker MQTT
+📡 Suscrito a: ['sensores/datos', 'sensores/estado', 'sensores/alertas']
+✅ Servidor listo
+📋 Documentación disponible en: http://localhost:8000/docs
+==================================================
+               🚀 API IoT con FastAPI
+==================================================
+  📡 MQTT Broker:  mqtt://localhost:1883
+  🌐 API:          http://localhost:8000
+  📖 Docs:         http://localhost:8000/docs
+  🔍 Redoc:        http://localhost:8000/redoc
+==================================================
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+```
+
+**Importante:** Mantén esta terminal abierta también.
+
+---
+
+### 🔌 PASO 6: Configurar y programar el ESP32
+
+#### 6.1 Conectar el hardware
+Conecta los sensores al ESP32 según la tabla:
+
+| Componente | Pin GPIO |
+|------------|----------|
+| DHT22 | 4 |
+| LDR | 34 |
+| LED | 2 |
+| Botón | 15 |
+
+#### 6.2 Configurar el código
+1. Abre `segundaversion_local.ino` en Arduino IDE
+2. **Cambia la IP del broker:**
+   - Busca la línea: `const char* mqtt_server = "192.168.56.1";`
+   - Cámbiala por la IP de tu computadora
+   - Para encontrar tu IP:
+     ```bash
+     # Windows
+     ipconfig
+     
+     # Linux/Mac
+     ip addr show
+     ```
+     Busca la IP de tu red local (ej: 192.168.1.100)
+
+3. **Cambia el WiFi si es necesario:**
+   - Busca: `const char* ssid = "INTELRED_FLIA_PEREZ";`
+   - Cámbialo por el nombre de tu red WiFi
+   - Busca: `const char* password = "70978983";`
+   - Cámbialo por la contraseña de tu WiFi
+
+#### 6.3 Subir el código al ESP32
+1. Conecta el ESP32 por USB
+2. En Arduino IDE:
+   - **Herramientas > Placa > ESP32 Dev Module**
+   - **Herramientas > Puerto > [puerto del ESP32]**
+3. **Compilar y subir** (botón →)
+4. Abre el **Monitor Serie** (Herramientas > Monitor Serie)
+5. Configura **115200 baudios**
+
+Deberías ver logs como:
+```
+=======================================
+Sistema IoT MQTT -> Broker Local
+Modo: Multitarea + Maquina de Estados + JSON
+=======================================
+Broker MQTT: 192.168.1.100:1883
+✅ WiFi conectado
+📡 IP del ESP32: 192.168.1.150
+✅ Conectado al broker
+Suscrito a: comandos/esp32
+```
+
+---
+
+### 🧪 PASO 7: Probar el sistema
+
+#### 7.1 Verificar que todo funciona
+1. **Abrir navegador** en http://localhost:8000/docs
+2. **Probar endpoint de health:**
+   - Click en `/api/health` > Try it out > Execute
+   - Deberías ver estado "ok" y mqtt_connected: true
+
+3. **Ver lecturas actuales:**
+   - Click en `/api/metrics/current` > Execute
+   - Deberías ver datos del ESP32
+
+#### 7.2 Usar el simulador (sin hardware)
+Si no tienes ESP32, puedes probar con el simulador:
+```bash
+cd Desktop/IoT_Proyecto/api_fastapi
+python simulador.py
+```
+
+Esto enviará datos ficticios cada 5 segundos.
+
+#### 7.3 Probar comandos al ESP32
+Desde Swagger UI:
+- `/api/commands/{device_id}` > Try it out
+- device_id: `ESP32_Sensor_01`
+- command: `reset` o `led_on` o `led_off`
+
+---
+
+### 📊 PASO 8: Configurar Grafana (opcional)
+
+#### 8.1 Instalar Grafana
+1. Ve a https://grafana.com/grafana/download
+2. Descarga e instala Grafana
+3. Inicia Grafana (suele ser http://localhost:3000)
+4. Usuario/contraseña por defecto: admin/admin
+
+#### 8.2 Agregar data source
+1. **Configuration > Data Sources > Add data source**
+2. Buscar "SimpleJSON"
+3. Configurar:
+   - URL: `http://localhost:8000/api/grafana`
+   - Access: Server
+4. **Save & Test**
+
+#### 8.3 Importar dashboard
+1. **Dashboards > Import**
+2. Subir `grafana-dashboard.json`
+3. Seleccionar el data source creado
+
+---
+
+### 🔧 Solución de problemas comunes
+
+#### "Error: ModuleNotFoundError"
+```bash
+# Asegúrate de activar el entorno virtual
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+#### "Connection refused" en MQTT
+- Verifica que Mosquitto esté corriendo
+- Verifica que uses la IP correcta en el ESP32
+- Verifica firewall (puerto 1883 debe estar abierto)
+
+#### ESP32 no conecta a WiFi
+- Verifica nombre y contraseña de WiFi en el código
+- Verifica que ESP32 y PC estén en la misma red
+- Prueba con otro puerto USB
+
+#### No llegan datos a la API
+- Verifica logs del ESP32 en Monitor Serie
+- Verifica logs de FastAPI en terminal
+- Prueba con el simulador: `python simulador.py`
+
+#### Grafana no muestra datos
+- Verifica que la API esté corriendo
+- Verifica data source URL
+- Prueba endpoints manualmente en navegador
+
+---
+
+### 📱 Usando el sistema
+
+#### Estados del LED en ESP32:
+- **APAGADO**: Todo normal
+- **ENCENDIDO FIJO**: Luz baja (ALERTA_LUZ)
+- **PARPADEANTE**: Temperatura alta (ALERTA_TEMP)
+- **ENCENDIDO FIJO**: Ambos problemas (ALERTA_DOBLE)
+
+#### Reset de alertas:
+- **Botón físico**: Presiona el botón conectado al GPIO 15
+- **Comando MQTT**: Envía "reset" al tópico `comandos/esp32`
+
+#### Umbrales de alerta:
+- **Temperatura**: >30°C (activa), <28°C (desactiva)
+- **Luz**: <20% (activa), >30% (desactiva)
+
+---
+
+### 🎯 Próximos pasos
+
+Una vez funcionando:
+1. **Experimenta** cambiando umbrales en el código del ESP32
+2. **Agrega más sensores** al sistema
+3. **Crea dashboards personalizados** en Grafana
+4. **Implementa notificaciones** por email/SMS
+5. **Despliega en la nube** (AWS/Heroku/Raspberry Pi)
+
+---
+
+## 2. Hardware - ESP32 (segundaversion_local.ino)
+
+---
+
 ## 2. Hardware - ESP32 (segundaversion_local.ino)
 
 ### 2.1 Sensores y Componentes Conectados

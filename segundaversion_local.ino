@@ -21,8 +21,8 @@ const int LED = 2;
 const int BOTON = 15;
 
 // ==================== CONFIGURACION WiFi ====================
-const char* ssid = "INTELRED_FLIA_PEREZ";
-const char* password = "70978983";
+const char* ssid = "INTELRED_F";
+const char* password = "70********";
 
 // ==================== CONFIGURACION BROKER MQTT LOCAL ====================
 // IP de tu computadora donde corre el servidor Node.js
