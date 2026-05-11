@@ -3,12 +3,62 @@ Módulo de base de datos SQLite para almacenar métricas IoT
 """
 
 import aiosqlite
-import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "iot_data.db"
+
+
+def _normalize_incoming_timestamp(ts: Any) -> Optional[str]:
+    """
+    Convierte timestamp del ESP/simulador a texto UTC 'YYYY-MM-DD HH:MM:SS' para SQLite.
+    Acepta: ms Unix (int), seg Unix (int), o cadena ISO.
+    """
+    if ts is None:
+        return None
+    if isinstance(ts, bool):
+        return None
+    try:
+        if isinstance(ts, (int, float)):
+            x = float(ts)
+            if x <= 0:
+                return None
+            if x > 1e12:
+                x = x / 1000.0
+            dt = datetime.fromtimestamp(x, tz=timezone.utc)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(ts, str):
+            s = ts.strip()
+            if not s:
+                return None
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError, OSError):
+        return None
+    return None
+
+
+# Expresión SQL: columna timestamp puede ser TEXT (correcto), o entero s/ms (legado ESP/simulador).
+_TS_CANONICAL = """(
+    CASE
+        WHEN typeof(timestamp) = 'integer' AND CAST(timestamp AS REAL) > 1e12
+            THEN datetime(CAST(timestamp AS INTEGER) / 1000, 'unixepoch')
+        WHEN typeof(timestamp) = 'integer' AND CAST(timestamp AS REAL) > 1e9
+            THEN datetime(CAST(timestamp AS INTEGER), 'unixepoch')
+        ELSE timestamp
+    END
+)"""
+
+
+def _ts_iso_select(alias: str = "timestamp") -> str:
+    return f"strftime('%Y-%m-%dT%H:%M:%SZ', {_TS_CANONICAL}) AS {alias}"
 
 
 class Database:
@@ -59,9 +109,10 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             # Verificar si el ESP32 envió su propio timestamp
             esp_timestamp = data.get('timestamp')
+            normalized_ts = _normalize_incoming_timestamp(esp_timestamp)
             
-            if esp_timestamp:
-                # El ESP32 envió timestamp - usar el valor proporcionado
+            if normalized_ts:
+                # Timestamp explícito ya normalizado a DATETIME SQLite (UTC)
                 cursor = await db.execute("""
                     INSERT INTO metrics (device_id, topic, temperatura, humedad, luz, estado, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -72,7 +123,7 @@ class Database:
                     data.get('humedad'),
                     data.get('luz'),
                     data.get('estado'),
-                    esp_timestamp
+                    normalized_ts
                 ))
             else:
                 # Comportamiento según manual: usar CURRENT_TIMESTAMP del servidor
@@ -127,22 +178,22 @@ class Database:
             since = (datetime.utcnow() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
             
             if device_id:
-                cursor = await db.execute("""
+                cursor = await db.execute(f"""
                     SELECT 
                         id, device_id, topic, temperatura, humedad, luz, estado,
-                        strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                        {_ts_iso_select()}
                     FROM metrics 
-                    WHERE timestamp >= ? AND device_id = ?
-                    ORDER BY timestamp ASC
+                    WHERE {_TS_CANONICAL} >= ? AND device_id = ?
+                    ORDER BY {_TS_CANONICAL} ASC
                 """, (since, device_id))
             else:
-                cursor = await db.execute("""
+                cursor = await db.execute(f"""
                     SELECT 
                         id, device_id, topic, temperatura, humedad, luz, estado,
-                        strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                        {_ts_iso_select()}
                     FROM metrics 
-                    WHERE timestamp >= ?
-                    ORDER BY timestamp ASC
+                    WHERE {_TS_CANONICAL} >= ?
+                    ORDER BY {_TS_CANONICAL} ASC
                 """, (since,))
             
             rows = await cursor.fetchall()
@@ -159,22 +210,22 @@ class Database:
             
             # Usar strftime para convertir timestamp a formato ISO 8601
             if device_id:
-                cursor = await db.execute("""
+                cursor = await db.execute(f"""
                     SELECT 
                         id, device_id, topic, temperatura, humedad, luz, estado,
-                        strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                        {_ts_iso_select()}
                     FROM metrics 
                     WHERE device_id = ?
-                    ORDER BY timestamp ASC
+                    ORDER BY {_TS_CANONICAL} ASC
                     LIMIT ?
                 """, (device_id, limit))
             else:
-                cursor = await db.execute("""
+                cursor = await db.execute(f"""
                     SELECT 
                         id, device_id, topic, temperatura, humedad, luz, estado,
-                        strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                        {_ts_iso_select()}
                     FROM metrics 
-                    ORDER BY timestamp ASC
+                    ORDER BY {_TS_CANONICAL} ASC
                     LIMIT ?
                 """, (limit,))
             
@@ -198,12 +249,12 @@ class Database:
             
             cursor = await db.execute(f"""
                 SELECT {metric} as value, 
-                       strftime('%Y-%m-%dT%H:%M:%SZ', timestamp) as timestamp
+                       {_ts_iso_select()}
                 FROM metrics
                 WHERE {metric} IS NOT NULL
-                    AND timestamp >= ?
-                    AND timestamp <= ?
-                ORDER BY timestamp ASC
+                    AND datetime({_TS_CANONICAL}) >= datetime(?)
+                    AND datetime({_TS_CANONICAL}) <= datetime(?)
+                ORDER BY datetime({_TS_CANONICAL}) ASC
             """, (date_from, date_to))
             
             rows = await cursor.fetchall()

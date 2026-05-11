@@ -5,14 +5,31 @@ Servidor completo para recepción de datos de ESP32 y visualización
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from database import db
 from mqtt_client import mqtt_client
+
+
+def _timestamp_to_epoch_ms(ts: Optional[str]) -> Optional[int]:
+    """Convierte timestamp ISO/SQLite a milisegundos UNIX (compatible con Grafana Infinity)."""
+    if ts is None or str(ts).strip() == "":
+        return None
+    raw = str(ts).strip()
+    try:
+        normalized = raw.replace("Z", "+00:00")
+        if "T" not in normalized and " " in normalized:
+            normalized = normalized.replace(" ", "T", 1)
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except (ValueError, TypeError, OSError):
+        return None
 
 
 # ==================== MODELOS PYDANTIC ====================
@@ -353,14 +370,19 @@ async def grafana_timeseries(
         result = []
         for m in metrics:
             val = m.get(metric)
-            if val is not None:
-                # Formato compatible con Infinity Time Series
-                # Grafana Infinity busca campo "time" para el eje X
-                result.append({
-                    "time": m.get('timestamp'),
-                    "metric": metric,
-                    "value": float(val)
-                })
+            if val is None:
+                continue
+            ts_ms = _timestamp_to_epoch_ms(m.get("timestamp"))
+            if ts_ms is None:
+                continue
+            # Campos "time" y "Time": Infinity / Grafana a veces solo detectan uno u otro
+            # Tipo de columna en el panel: Timestamp (UNIX ms). Evitar JSONata vacío: usar parser Simple.
+            result.append({
+                "time": ts_ms,
+                "Time": ts_ms,
+                "metric": metric,
+                "value": float(val)
+            })
         
         return result
         
@@ -391,12 +413,17 @@ async def grafana_data(
         result = []
         for m in metrics:
             val = m.get(metric)
-            if val is not None:
-                result.append({
-                    "time": m.get('timestamp'),  # Ya viene como ISO 8601 con 'Z'
-                    "value": float(val),
-                    "metric": metric
-                })
+            if val is None:
+                continue
+            ts_ms = _timestamp_to_epoch_ms(m.get("timestamp"))
+            if ts_ms is None:
+                continue
+            result.append({
+                "time": ts_ms,
+                "Time": ts_ms,
+                "value": float(val),
+                "metric": metric
+            })
         
         return result
         
